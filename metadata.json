@@ -1,0 +1,5 @@
+{
+  "name": "LoRa Water Monitor",
+  "description": "Real-time dashboard for LoRaWAN Water Level Gateway connected via Google Sheets.",
+  "requestFramePermissions": []
+}
