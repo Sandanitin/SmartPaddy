@@ -201,7 +201,7 @@ function App() {
     setTempName(sensor.name);
   };
 
-  const handleSaveName = (e: React.MouseEvent, id: string) => {
+  const handleSaveName = (e: React.SyntheticEvent, id: string) => {
     e.stopPropagation();
     const saved = getSavedNames();
     if (!tempName.trim()) {
@@ -214,7 +214,7 @@ function App() {
     loadData(); // Reload to apply changes
   };
 
-  const handleCancelEdit = (e: React.MouseEvent) => {
+  const handleCancelEdit = (e: React.SyntheticEvent) => {
     e.stopPropagation();
     setEditingNameId(null);
   };
