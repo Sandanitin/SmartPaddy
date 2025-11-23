@@ -14,158 +14,170 @@ interface Props {
 
 export const IrrigationAdvice: React.FC<Props> = ({ level, weather, cropStage, plotName }) => {
   const [showRationale, setShowRationale] = useState(false);
-  
-  // Removed nameSuffix as per user request to not mention plot name in the advice text
-  // const nameSuffix = plotName ? ` ${plotName}` : ''; 
 
+  // --- Constants & Thresholds ---
+  // Sensor Depth Mapping:
+  // 0cm = Bottom of pipe (-15cm relative to soil)
+  // 15cm = Soil Surface (0cm relative)
+  // 30cm = Top of gauge (+15cm relative)
+  
+  const SOIL_LEVEL = 15;
+  
+  // User Defined Rules
+  // "Below 5cm" (Absolute) => -10cm Relative to Soil (Critical Dry)
+  const THRESHOLD_LOW = 5; 
+  // "Above 20cm" (Absolute) => +5cm Relative to Soil (High Water)
+  const THRESHOLD_HIGH = 20;
+
+  // Weather Factors
+  const rainChance = weather?.rainChance || 0;
+  const rainForecast = weather?.rainForecast24h || 0;
+  // Consider rain "Expected" if chance > 50% OR significant volume (>5mm)
+  const isRainExpected = rainChance > 50 || rainForecast > 5; 
+  const isHighHeat = (weather?.temp || 0) > 35;
+
+  // Advice State
   let advice = {
     type: 'good' as 'good' | 'warn' | 'critical' | 'info',
     text: 'Levels Optimal',
-    subtext: 'Keep monitoring',
-    rationale: 'Water levels are within the safe range.',
+    subtext: 'Monitoring...',
+    rationale: 'Water levels are within the target range.',
     smartTip: null as string | null,
     icon: <Check size={16} />
   };
 
-  const isRainExpected = weather && (weather.rainChance > 50 || weather.rainForecast24h > 5);
-  const isHighHeat = weather && weather.temp > 35;
+  const setAdvice = (
+      type: 'good' | 'warn' | 'critical' | 'info', 
+      text: string, 
+      subtext: string, 
+      rationale: string, 
+      tip: string | null, 
+      icon: React.ReactNode
+  ) => {
+    advice = { type, text, subtext, rationale, smartTip: tip, icon };
+  };
 
-  // Scale: 0-30cm Absolute
-  // 15cm = Soil Surface (0 Relative)
-  const relativeDepth = level - 15;
-  const absDepth = Math.abs(relativeDepth).toFixed(0);
+  // --- Decision Logic Helpers ---
 
-  const applyDefaultLogic = () => {
-    if (level < 5) {
-       // < 5cm absolute (< -10cm relative)
-       if (isRainExpected) {
-          advice = { 
-              type: 'warn', 
-              text: 'Critically Low', 
-              subtext: `Rain expected. (-${absDepth}cm)`, 
-              rationale: 'Rain is forecast, but soil is currently too dry for most stages.',
-              smartTip: 'Check if rain volume is enough to re-saturate soil (needs >20mm).',
-              icon: <CloudRain size={16} /> 
-          };
-       } else {
-          advice = { 
-              type: 'critical', 
-              text: 'Irrigate', 
-              subtext: `Level < 5cm. Target: 17cm+.`, 
-              rationale: 'Severe drying can lead to yield loss and soil cracking beyond recovery.',
-              smartTip: 'Prioritize irrigation immediately to prevent soil cracking.',
-              icon: <Droplets size={16} /> 
-          };
-       }
-    } else if (level >= 5 && level < 15) {
-       // 5-15cm absolute -> Safe AWD Zone
-       advice = { 
-           type: 'info', 
-           text: 'AWD Drying', 
-           subtext: `Water -${absDepth}cm below soil.`, 
-           rationale: 'Alternate Wetting and Drying (AWD) saves water and improves root strength.',
-           smartTip: null,
-           icon: <ArrowDown size={16} /> 
-       };
-    } else if (level >= 15 && level <= 20) {
-       // 15-20cm absolute -> Saturated / Good
-       // Adjusted upper limit to 20cm as per user request for "Stop Irrigating" > 20cm
-       advice = { 
-           type: 'good', 
-           text: 'Levels Good', 
-           subtext: `Depth ${level >= 15 ? '+' : ''}${(level - 15).toFixed(0)}cm.`, 
-           rationale: 'Water levels are optimal for crop growth.',
-           smartTip: null,
-           icon: <Check size={16} /> 
-       };
-    } else {
-       // > 20cm absolute -> Stop Irrigating
-       advice = { 
-           type: 'warn', 
-           text: 'Stop Irrigating', 
-           subtext: `Level > 20cm.`, 
-           rationale: 'Water level exceeds 20cm. Stop inflow to save water and prevent overflow.',
-           smartTip: isRainExpected ? 'Rain incoming. Lower spillways to prevent overflow.' : 'Consider draining slightly if level continues to rise.',
-           icon: <AlertTriangle size={16} /> 
-       };
+  const adviseLowWater = (stageName: string) => {
+      const depthRel = Math.abs(level - SOIL_LEVEL);
+      
+      if (isRainExpected) {
+          setAdvice(
+              'warn',
+              'Wait for Rain',
+              `Rain chance ${rainChance}%.`,
+              `Water is low (-${depthRel}cm), but ${rainForecast}mm rain is forecast. Delay irrigation to save water.`,
+              'Monitor level closely. If rain misses, irrigate immediately.',
+              <CloudRain size={16} />
+          );
+      } else {
+          setAdvice(
+              'critical', // Always critical if below 5cm and no rain
+              'Irrigate Now',
+              `Level < ${THRESHOLD_LOW}cm.`,
+              `Water level is critically low (-${depthRel}cm) for ${stageName}. Risk of soil cracking.`,
+              'Fill to saturation (15cm+) immediately.',
+              <Droplets size={16} />
+          );
+      }
+  };
+
+  const adviseHighWater = () => {
+      const depthRel = (level - SOIL_LEVEL).toFixed(0);
+      
+      if (isRainExpected) {
+          setAdvice(
+              'warn',
+              'Drain Excess',
+              `Rain coming (+${depthRel}cm).`,
+              `Water level is already high and rain is forecast. Drain to prevent overflow.`,
+              'Lower spillways to 15cm level.',
+              <ArrowDown size={16} />
+          );
+      } else {
+           setAdvice(
+              'info',
+              'Stop Irrigating',
+              `Level > ${THRESHOLD_HIGH}cm.`,
+              `Water depth (+${depthRel}cm) is sufficient. Further irrigation is wasteful.`,
+              'Allow water to subside naturally.',
+              <ArrowDown size={16} />
+          );
+      }
+  };
+
+  // --- Main Evaluation ---
+
+  const evaluate = () => {
+    // 1. Get Stage Info
+    const stageIndex = cropStage?.index ?? 1; // Default to Tillering (1) logic if unknown
+    const stageName = cropStage?.name ?? "Vegetative";
+
+    // 2. Identify Stage Sensitivity
+    // Stages 3 (Booting) and 4 (Flowering) need FLOOD (>15cm / 0 Rel)
+    // Stage 0 (Establishment) needs SATURATION (>15cm / 0 Rel)
+    const needsFlood = [0, 3, 4].includes(stageIndex);
+    const allowAWD = [1, 2, 5].includes(stageIndex);
+    const needsDrain = [6, 7].includes(stageIndex);
+
+    // 3. Apply Logic Priorities
+    
+    // PRIORITY 1: Harvest / Drain Stages
+    // If field needs to be dry, any water > 15cm is bad.
+    if (needsDrain) {
+        if (level > SOIL_LEVEL) {
+            return setAdvice('warn', 'Drain Field', 'Prepare harvest.', 'Field should be dry for ripening.', 'Open all drainage outlets.', <ArrowDown size={16} />);
+        } else {
+            return setAdvice('good', 'Ready', 'Field dry.', 'Conditions optimal for harvest.', null, <Sprout size={16} />);
+        }
+    }
+
+    // PRIORITY 2: High Water Rule (>20cm)
+    // Applies to all stages except where deep flood is explicitly required (rare)
+    if (level > THRESHOLD_HIGH) { 
+        return adviseHighWater();
+    }
+
+    // PRIORITY 3: Critical Low Water Rule (<5cm)
+    // Applies universally as "Too Dry" for almost all growing stages
+    if (level < THRESHOLD_LOW) {
+        return adviseLowWater(stageName);
+    }
+
+    // PRIORITY 4: Intermediate Levels (5cm to 20cm)
+    
+    // A: Stages requiring Flood (Establishment, Booting, Flowering)
+    // They prefer > 15cm
+    if (needsFlood) {
+        if (level < SOIL_LEVEL) { // 5cm to 15cm
+            // It's not <5cm (Critical Low), but it's below target (15cm).
+            if (isRainExpected) {
+                 return setAdvice('warn', 'Wait for Rain', `Rain chance ${rainChance}%.`, `Level (${level}cm) is sub-optimal, but rain is likely.`, null, <CloudRain size={16} />);
+            } else {
+                 return setAdvice('warn', 'Increase Level', 'Target 15cm+.', `Stage ${stageName} requires standing water (0-5cm relative).`, 'Top up to 17-18cm.', <Droplets size={16} />);
+            }
+        } else {
+             // 15cm to 20cm -> Perfect
+             return setAdvice('good', 'Optimal Flood', 'Maintained.', `Good water depth for ${stageName}.`, isHighHeat ? 'Flood helps cool the canopy.' : null, <Check size={16} />);
+        }
+    }
+
+    // B: Stages allowing AWD (Tillering, Elongation, Filling)
+    if (allowAWD) {
+        if (level < SOIL_LEVEL) { // 5cm to 15cm
+             // This is the AWD "Safe Drying" zone
+             return setAdvice('info', 'AWD Active', 'Soil drying.', 'Water is below soil surface but above critical limit. Promotes root depth.', 'Monitor for soil cracks.', <ArrowDown size={16} />);
+        } else {
+             // 15cm to 20cm
+             return setAdvice('good', 'Levels Good', 'Saturated.', 'Water availability is adequate.', null, <Check size={16} />);
+        }
     }
   };
 
-  if (cropStage) {
-      const { index } = cropStage;
+  evaluate();
 
-      // 0: Establishment
-      if (index === 0) {
-          if (level < 15) {
-             advice = { type: 'critical', text: 'Irrigate', subtext: 'Soil must be saturated.', rationale: 'Seedlings need consistent moisture to recover from transplant shock.', smartTip: 'Exposed soil allows weeds to germinate.', icon: <Droplets size={16} /> };
-          } else if (level > 25) {
-             advice = { type: 'warn', text: 'Drain', subtext: 'May drown seedlings.', rationale: 'Seedlings cannot breathe if fully submerged.', smartTip: 'Deep water reduces herbicide efficacy.', icon: <AlertTriangle size={16} /> };
-          } else {
-             advice = { type: 'good', text: 'Levels Optimal', subtext: 'Good for establishment.', rationale: 'Shallow water controls weeds without drowning seedlings.', smartTip: null, icon: <Check size={16} /> };
-          }
-      }
-      // 1: Tillering - AWD Allowed
-      else if (index === 1) {
-          applyDefaultLogic();
-          if (advice.type === 'good') {
-             advice.subtext = 'Good for tillering.';
-             advice.rationale = 'Shallow flood promotes active tillering. AWD is safe.';
-          }
-      }
-      // 2: Stem Elongation - AWD Recommended
-      else if (index === 2) {
-           if (level < 5) {
-               advice = { type: 'warn', text: 'Too Dry', subtext: 'Irrigate if >3 days dry.', rationale: 'Extended dryness can stress the plant before flowering.', smartTip: null, icon: <Droplets size={16} /> };
-           } else if (level < 15) {
-               advice = { type: 'info', text: 'AWD Drying', subtext: 'Good for root depth.', rationale: 'Mild drying pushes roots deeper before the reproductive phase.', smartTip: 'Check for soil cracking - irrigate if cracks >1cm.', icon: <ArrowDown size={16} /> };
-           } else if (level > 22) {
-               advice = { type: 'info', text: 'Stop Irrigating', subtext: 'Let water subside.', rationale: 'Deep water is unnecessary; save irrigation water.', smartTip: null, icon: <ArrowDown size={16} /> };
-           } else {
-               advice = { type: 'good', text: 'Levels OK', subtext: 'Monitor drying cycle.', rationale: 'Water levels are sufficient for elongation.', smartTip: null, icon: <Check size={16} /> };
-           }
-      }
-      // 3: Booting / Panicle Initiation - FLOOD REQUIRED
-      else if (index === 3) {
-           if (level < 15) {
-               advice = { type: 'critical', text: 'Irrigate', subtext: 'Stress causes yield loss.', rationale: 'Water stress now causes abortion of spikelets (yield loss).', smartTip: 'This is the most critical stage for water.', icon: <AlertTriangle size={16} /> };
-           } else if (level < 18) {
-               advice = { type: 'warn', text: 'Increase Level', subtext: 'Target 5cm standing water.', rationale: 'Standing water buffers temperature and ensures panicle development.', smartTip: 'Ensure field is fully submerged.', icon: <Droplets size={16} /> };
-           } else if (level > 30) { 
-               advice = { type: 'warn', text: 'High Water', subtext: 'Check drainage.', rationale: 'Excessive depth is wasteful but not critically harmful.', smartTip: null, icon: <AlertTriangle size={16} /> };
-           } else {
-               advice = { type: 'good', text: 'Optimal Flood', subtext: 'Crucial for panicle.', rationale: 'Perfect conditions for panicle initiation.', smartTip: null, icon: <Check size={16} /> };
-           }
-      }
-      // 4: Flowering - FLOOD REQUIRED
-      else if (index === 4) {
-          if (level < 15) {
-               advice = { type: 'critical', text: 'Irrigate', subtext: 'Stress causes sterility.', rationale: 'Drought during flowering causes high sterility (empty grains).', smartTip: isHighHeat ? 'High heat detected! Flood to cool the canopy.' : null, icon: <AlertTriangle size={16} /> };
-           } else {
-               advice = { type: 'good', text: 'Optimal', subtext: 'Maintain during flowering.', rationale: 'Stable water supply is essential for pollination.', smartTip: 'Avoid disturbing the water or plants during pollination (mid-day).', icon: <Check size={16} /> };
-           }
-      }
-      // 5: Grain Filling (Milk/Dough) - Saturated / Shallow
-      else if (index === 5) {
-          if (level < 15) {
-              advice = { type: 'info', text: 'Keep Moist', subtext: 'Saturation is sufficient.', rationale: 'Standing water is not strictly needed, but soil must stay moist.', smartTip: null, icon: <Droplets size={16} /> };
-          } else if (level > 25) {
-              advice = { type: 'info', text: 'Stop Irrigating', subtext: 'Deep water not needed.', rationale: 'You can stop irrigation to prepare for ripening.', smartTip: 'Start planning terminal drainage.', icon: <ArrowDown size={16} /> };
-          } else {
-              advice = { type: 'good', text: 'Good Levels', subtext: 'Filling stage.', rationale: 'Moisture is sufficient for grain filling.', smartTip: null, icon: <Check size={16} /> };
-          }
-      }
-      // 6+: Maturity - Drain
-      else if (index >= 6) {
-          if (level > 15) {
-              advice = { type: 'warn', text: 'Drain', subtext: 'Prepare for harvest.', rationale: 'Draining ensures uniform ripening and easier harvesting.', smartTip: 'Open all drainage outlets.', icon: <ArrowDown size={16} /> };
-          } else {
-              advice = { type: 'good', text: 'Ready', subtext: 'Field is dry.', rationale: 'Field is correctly drained for harvest.', smartTip: null, icon: <Sprout size={16} /> };
-          }
-      }
-  } else {
-      applyDefaultLogic();
-  }
-
+  // Visual Styles
   const colors = {
     good: 'bg-emerald-50 text-emerald-700 border-emerald-200',
     warn: 'bg-amber-50 text-amber-700 border-amber-200',
@@ -183,7 +195,7 @@ export const IrrigationAdvice: React.FC<Props> = ({ level, weather, cropStage, p
   return (
     <div className="mt-3">
         <div 
-            className={`flex items-center justify-between gap-3 px-3 py-2 rounded-lg border ${colors[advice.type]} transition-all cursor-pointer`}
+            className={`flex items-center justify-between gap-3 px-3 py-2 rounded-lg border ${colors[advice.type]} transition-all cursor-pointer hover:shadow-sm`}
             onClick={() => setShowRationale(!showRationale)}
         >
              <div className="flex items-center gap-3">
@@ -191,23 +203,24 @@ export const IrrigationAdvice: React.FC<Props> = ({ level, weather, cropStage, p
                     {advice.icon}
                 </div>
                 <div className="flex flex-col">
-                    <span className="text-xs font-bold uppercase tracking-tight leading-tight line-clamp-1">{advice.text}</span>
-                    <span className="text-[10px] opacity-80 font-medium leading-tight line-clamp-1">{advice.subtext}</span>
+                    <span className="text-xs font-bold uppercase tracking-tight leading-tight">{advice.text}</span>
+                    <span className="text-[10px] opacity-90 font-medium leading-tight">{advice.subtext}</span>
                 </div>
              </div>
              <Info size={14} className="opacity-50 hover:opacity-100" />
         </div>
         
-        {/* Expandable Rationale / Tip */}
         {showRationale && (
-            <div className={`mt-1 p-2.5 rounded-lg text-[10px] leading-relaxed font-medium animate-in fade-in slide-in-from-top-1 ${colors[advice.type].replace('bg-', 'bg-opacity-50 bg-')}`}>
-                <span className="font-bold uppercase opacity-70 block mb-0.5">Why?</span>
-                {advice.rationale}
+            <div className={`mt-1 p-3 rounded-lg text-[10px] leading-relaxed animate-in fade-in slide-in-from-top-1 ${colors[advice.type].replace('bg-', 'bg-opacity-40 bg-')}`}>
+                <div className="flex gap-1.5 mb-1.5">
+                    <span className="font-bold uppercase opacity-70">Analysis:</span>
+                    <span className="font-medium">{advice.rationale}</span>
+                </div>
                 
                 {advice.smartTip && (
-                    <div className="mt-2 pt-2 border-t border-black/5 flex gap-1.5 items-start">
+                    <div className="pt-2 border-t border-black/5 flex gap-1.5 items-start text-emerald-900/80">
                          <Lightbulb size={12} className="shrink-0 mt-0.5" />
-                         <span className="italic">{advice.smartTip}</span>
+                         <span className="italic font-medium">{advice.smartTip}</span>
                     </div>
                 )}
             </div>

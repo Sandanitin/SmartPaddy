@@ -9,8 +9,9 @@ import { IrrigationAdvice } from './components/IrrigationAdvice';
 import { WeatherDashboard } from './components/WeatherDashboard';
 import { CropManager, calculateStage } from './components/CropManager';
 import { AWDGauge } from './components/AWDGauge';
+import { PaddyVisual } from './components/PaddyVisual';
 import { fetchLocalWeather, getUserLocation, WeatherData } from './services/weatherService';
-import { Sprout, RefreshCw, ArrowLeft, Clock, LayoutDashboard, FileText, AlertTriangle, Zap, Radio, ArrowRight, Move, Save, MapPin, CloudRain, Sun, CloudSun, Smartphone, Edit2, Check, X } from 'lucide-react';
+import { Sprout, RefreshCw, ArrowLeft, Clock, LayoutDashboard, FileText, AlertTriangle, Zap, Radio, ArrowRight, ArrowUp, ArrowDown, Move, Save, MapPin, CloudRain, Sun, CloudSun, Smartphone, Edit2, Check, X, WifiOff } from 'lucide-react';
 
 function App() {
   const [loading, setLoading] = useState(true);
@@ -24,6 +25,7 @@ function App() {
   const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
   const [activeTab, setActiveTab] = useState<'dashboard' | 'logs' | 'weather'>('dashboard');
   const [isRearranging, setIsRearranging] = useState(false);
+  const [usingCache, setUsingCache] = useState(false);
   
   // Renaming State
   const [editingNameId, setEditingNameId] = useState<string | null>(null);
@@ -44,12 +46,7 @@ function App() {
     } catch { return {}; }
   };
 
-  const loadData = async () => {
-    if (!isRearranging) setLoading(true); 
-    setError(null);
-    try {
-      const data = await fetchSensorData();
-      
+  const processAndSetData = (data: { sensors: SensorData[], gateway: GatewayStatus, logs: SheetRow[] }) => {
       // 1. Apply Custom Names
       const savedNames = getSavedNames();
       const sensorsWithNames = data.sensors.map(s => ({
@@ -79,18 +76,63 @@ function App() {
       setSensors(sortedSensors);
       setGateway(data.gateway);
       setLogs(data.logs);
-      setLastRefreshed(new Date());
 
+      // Preserve selection with updated data
       if (selectedSensor) {
         const updated = sortedSensors.find(s => s.id === selectedSensor.id);
         if (updated) setSelectedSensor(updated);
       }
+  };
+
+  const loadData = async () => {
+    if (!isRearranging) setLoading(true); 
+    setError(null);
+    // Note: Do not reset usingCache immediately to avoid flickering UI during re-fetch
+    
+    try {
+      const data = await fetchSensorData();
+      
+      // If we got valid sensor data, treat as success
+      if (data.sensors.length > 0) {
+          // Update Cache
+          localStorage.setItem('sensor_cache', JSON.stringify({
+              timestamp: Date.now(),
+              data
+          }));
+
+          processAndSetData(data);
+          setLastRefreshed(new Date());
+          setUsingCache(false); // Valid live data
+      } else {
+          // Received empty data structure (possibly offline or empty sheet)
+          throw new Error("No data received from gateway");
+      }
+
     } catch (err: any) {
-      console.error(err);
-      const message = err.message && err.message.length > 0 && err.message !== "Failed to fetch" 
-        ? err.message 
-        : "Connection failed. Please ensure your Google Sheet is active and accessible.";
-      setError(message);
+      console.warn("Fetch failed, attempting to load from cache", err);
+      
+      const cached = localStorage.getItem('sensor_cache');
+      if (cached) {
+          try {
+              const { timestamp, data } = JSON.parse(cached);
+              processAndSetData(data);
+              setLastRefreshed(new Date(timestamp));
+              setUsingCache(true);
+              // Clear error if we successfully loaded cache (we show the Offline Banner instead)
+              setError(null);
+          } catch (cacheErr) {
+              console.error("Cache corrupted", cacheErr);
+              setUsingCache(false);
+              const message = err.message || "Connection failed and cache is unavailable.";
+              setError(message);
+          }
+      } else {
+          setUsingCache(false);
+          const message = err.message && err.message.length > 0 && err.message !== "Failed to fetch" 
+            ? err.message 
+            : "Connection failed. Please ensure your Google Sheet is active and accessible.";
+          setError(message);
+      }
     } finally {
       setLoading(false);
     }
@@ -389,7 +431,7 @@ function App() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         
         {/* Error Banner */}
-        {error && (
+        {error && !usingCache && (
           <div className="bg-red-50 border border-red-100 rounded-xl p-4 mb-6 flex items-center gap-4 text-red-800 shadow-sm animate-in slide-in-from-top-2">
             <div className="bg-red-100 p-2 rounded-full shrink-0">
               <AlertTriangle className="text-red-600" size={20} />
@@ -401,6 +443,27 @@ function App() {
             <button 
               onClick={loadData} 
               className="px-4 py-2 bg-white border border-red-200 text-red-700 text-xs font-bold uppercase tracking-wide rounded-lg hover:bg-red-50 shadow-sm"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        {/* Offline / Cached Banner */}
+        {usingCache && (
+          <div className="bg-amber-50 border border-amber-100 rounded-xl p-4 mb-6 flex items-center gap-4 text-amber-800 shadow-sm animate-in slide-in-from-top-2">
+            <div className="bg-amber-100 p-2 rounded-full shrink-0">
+              <WifiOff className="text-amber-600" size={20} />
+            </div>
+            <div className="flex-1">
+              <p className="font-bold text-sm text-amber-900">Offline Mode</p>
+              <p className="text-xs text-amber-700 mt-0.5">
+                Displaying cached data from {lastRefreshed.toLocaleString()}. Live updates paused.
+              </p>
+            </div>
+            <button 
+              onClick={loadData} 
+              className="px-4 py-2 bg-white border border-amber-200 text-amber-700 text-xs font-bold uppercase tracking-wide rounded-lg hover:bg-amber-50 shadow-sm"
             >
               Retry
             </button>
@@ -450,10 +513,41 @@ function App() {
               <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                 <div className="p-6 md:p-8 border-b border-slate-100 flex flex-col md:flex-row justify-between md:items-start gap-6 bg-gradient-to-b from-white to-slate-50/50">
                   <div>
-                    <div className="flex items-center gap-3 mb-2">
-                      <h2 className="text-3xl font-bold text-slate-900 tracking-tight">{selectedSensor.name}</h2>
-                      <StatusBadge status={selectedSensor.status} />
+                    {/* Rename in Detail View */}
+                    <div className="flex items-center gap-3 mb-2 min-h-[44px]">
+                      {editingNameId === selectedSensor.id ? (
+                          <div className="flex items-center gap-2 w-full max-w-md animate-in fade-in" onClick={e => e.stopPropagation()}>
+                              <input 
+                                  type="text" 
+                                  value={tempName}
+                                  onChange={e => setTempName(e.target.value)}
+                                  className="text-2xl font-bold text-slate-900 border-b-2 border-emerald-500 focus:outline-none bg-white/50 w-full px-1"
+                                  autoFocus
+                                  onKeyDown={(e) => {
+                                      if(e.key === 'Enter') handleSaveName(e, selectedSensor.id);
+                                      if(e.key === 'Escape') handleCancelEdit(e);
+                                  }}
+                              />
+                              <button onClick={(e) => handleSaveName(e, selectedSensor.id)} className="p-2 bg-emerald-100 text-emerald-700 rounded-lg hover:bg-emerald-200 shrink-0"><Check size={20}/></button>
+                              <button onClick={(e) => handleCancelEdit(e)} className="p-2 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 shrink-0"><X size={20}/></button>
+                          </div>
+                      ) : (
+                          <div className="flex items-center gap-3 group/title">
+                            <h2 className="text-3xl font-bold text-slate-900 tracking-tight cursor-pointer hover:text-emerald-700 transition-colors" onClick={(e) => handleEditName(e, selectedSensor)} title="Click to rename">
+                                {selectedSensor.name}
+                            </h2>
+                            <button 
+                                onClick={(e) => handleEditName(e, selectedSensor)}
+                                className="opacity-0 group-hover/title:opacity-100 text-slate-300 hover:text-blue-600 transition-all p-1.5 rounded-lg hover:bg-slate-100"
+                                title="Rename Field"
+                            >
+                                <Edit2 size={18} />
+                            </button>
+                            <StatusBadge status={selectedSensor.status} />
+                          </div>
+                      )}
                     </div>
+                    
                     <div className="flex items-center gap-4 text-sm text-slate-500 mb-4">
                       {(() => {
                           const isLora = selectedSensor.id.toLowerCase().includes('lora');
@@ -688,7 +782,7 @@ function App() {
                                   <h3 className="font-bold text-slate-900 group-hover:text-emerald-600 transition-colors truncate">{sensor.name}</h3>
                                   <button 
                                       onClick={(e) => handleEditName(e, sensor)}
-                                      className="opacity-100 md:opacity-0 group-hover/name:opacity-100 text-slate-300 hover:text-blue-600 transition-all p-1 rounded hover:bg-slate-100 shrink-0"
+                                      className="text-slate-200 hover:text-blue-600 transition-all p-1 rounded hover:bg-slate-100 shrink-0"
                                       title="Rename Plot"
                                   >
                                       <Edit2 size={12} />
@@ -702,23 +796,45 @@ function App() {
                 </div>
 
                 {/* Water Level & Gauge */}
-                <div className="mb-4">
-                    <div className="flex items-end gap-2 mb-2">
-                        <span className="text-3xl font-bold text-slate-900 tracking-tight">{sensor.currentLevel}</span>
-                        <span className="text-sm font-medium text-slate-400 mb-1.5">cm</span>
+                <div className="flex items-center justify-between mb-4 pr-2">
+                    <div className="flex flex-col">
+                        <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Water Level</span>
+                        <div className="flex items-baseline gap-1 mb-2">
+                            <span className="text-4xl font-bold text-slate-900 tracking-tighter">{sensor.currentLevel}</span>
+                            <span className="text-base font-medium text-slate-400">cm</span>
+                        </div>
+                        <div className="text-xs font-semibold">
+                            {sensor.currentLevel >= 15 ? (
+                                <span className="text-blue-600 bg-blue-50 px-2 py-1 rounded-md border border-blue-100 flex items-center w-fit gap-1">
+                                    <ArrowUp size={12} /> {Math.round(sensor.currentLevel - 15)}cm Above
+                                </span>
+                            ) : (
+                                <span className="text-amber-600 bg-amber-50 px-2 py-1 rounded-md border border-amber-100 flex items-center w-fit gap-1">
+                                    <ArrowDown size={12} /> {Math.abs(Math.round(sensor.currentLevel - 15))}cm Below
+                                </span>
+                            )}
+                        </div>
                     </div>
                     <AWDGauge level={sensor.currentLevel} />
                 </div>
 
-                {/* Crop Stage Info */}
+                {/* Crop Stage Info with Visual */}
                 {cropInfo && (
-                    <div className="flex items-center justify-between text-xs mb-3 bg-slate-50 p-2 rounded-lg border border-slate-100">
-                        <div className="flex items-center gap-1.5 font-bold text-slate-700">
-                            <Sprout size={14} className="text-emerald-600" />
-                            {cropInfo.stageName}
+                    <div className="mb-4 rounded-xl border border-emerald-100 bg-gradient-to-b from-emerald-50/40 to-white overflow-hidden relative group-hover:border-emerald-200 transition-colors">
+                        <div className="flex items-center justify-between px-3 py-2 border-b border-emerald-100/50 bg-white/60 backdrop-blur-[2px] relative z-10">
+                            <div className="flex items-center gap-1.5 font-bold text-emerald-800 text-xs">
+                                <Sprout size={14} className="text-emerald-600" />
+                                {cropInfo.stageName}
+                            </div>
+                            <div className="text-[10px] font-bold text-emerald-600 bg-white px-2 py-0.5 rounded-full border border-emerald-100 shadow-sm">
+                                Day {cropInfo.days}
+                            </div>
                         </div>
-                        <div className="font-mono text-slate-500">
-                            Day {cropInfo.days}
+                        
+                        <div className="h-24 w-full flex items-end justify-center relative">
+                             <div className="w-full h-full p-2">
+                                <PaddyVisual stageIndex={cropInfo.stageIndex} />
+                             </div>
                         </div>
                     </div>
                 )}
