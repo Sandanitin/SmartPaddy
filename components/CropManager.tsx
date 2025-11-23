@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Calendar, Save, Edit2, Sprout, Timer, AlertCircle, BookOpen, Bug, Droplets, Leaf, Scissors, Sun, CloudRain, Wind, Thermometer, Droplet, StickyNote, Smartphone } from 'lucide-react';
+import { Save, Edit2, Sprout, Timer, AlertCircle, BookOpen, Bug, Droplets, Leaf, Scissors, Sun, Wind, Thermometer, Droplet, StickyNote, Smartphone } from 'lucide-react';
 import { PaddyVisual } from './PaddyVisual';
 import { WeatherData } from '../services/weatherService';
 
