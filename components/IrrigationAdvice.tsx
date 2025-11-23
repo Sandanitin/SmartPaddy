@@ -17,17 +17,15 @@ export const IrrigationAdvice: React.FC<Props> = ({ level, weather, cropStage, p
 
   // --- Constants & Thresholds ---
   // Sensor Depth Mapping:
-  // 0cm = Bottom of pipe (-15cm relative to soil)
-  // 15cm = Soil Surface (0cm relative)
-  // 30cm = Top of gauge (+15cm relative)
+  // 0cm = Bottom of pipe (Dry)
+  // 15cm = Soil Surface
+  // 30cm = Top of gauge
   
   const SOIL_LEVEL = 15;
   
-  // User Defined Rules
-  // "Below 5cm" (Absolute) => -10cm Relative to Soil (Critical Dry)
-  const THRESHOLD_LOW = 5; 
-  // "Above 20cm" (Absolute) => +5cm Relative to Soil (High Water)
-  const THRESHOLD_HIGH = 20;
+  // User Defined Rules (Absolute Gauge Readings)
+  const THRESHOLD_LOW = 5;  // Gauge < 5cm (Very Dry)
+  const THRESHOLD_HIGH = 20; // Gauge > 20cm (High Water)
 
   // Weather Factors
   const rainChance = weather?.rainChance || 0;
@@ -60,38 +58,34 @@ export const IrrigationAdvice: React.FC<Props> = ({ level, weather, cropStage, p
   // --- Decision Logic Helpers ---
 
   const adviseLowWater = (stageName: string) => {
-      const depthRel = Math.abs(level - SOIL_LEVEL);
-      
       if (isRainExpected) {
           setAdvice(
               'warn',
               'Wait for Rain',
               `Rain chance ${rainChance}%.`,
-              `Water is low (-${depthRel}cm), but ${rainForecast}mm rain is forecast. Delay irrigation to save water.`,
-              'Monitor level closely. If rain misses, irrigate immediately.',
+              `Current Gauge: ${level}cm. With ${rainForecast}mm rain forecast, delay irrigation to save water.`,
+              'Monitor level closely. If rain misses, irrigate.',
               <CloudRain size={16} />
           );
       } else {
           setAdvice(
               'critical', // Always critical if below 5cm and no rain
               'Irrigate Now',
-              `Level < ${THRESHOLD_LOW}cm.`,
-              `Water level is critically low (-${depthRel}cm) for ${stageName}. Risk of soil cracking.`,
-              'Fill to saturation (15cm+) immediately.',
+              `Level ${level}cm (Low)`,
+              `Gauge reads ${level}cm, which is critically low (<${THRESHOLD_LOW}cm) for ${stageName}. Risk of soil cracking.`,
+              'Fill to Gauge 15cm+ (Soil Surface) immediately.',
               <Droplets size={16} />
           );
       }
   };
 
   const adviseHighWater = () => {
-      const depthRel = (level - SOIL_LEVEL).toFixed(0);
-      
       if (isRainExpected) {
           setAdvice(
               'warn',
               'Drain Excess',
-              `Rain coming (+${depthRel}cm).`,
-              `Water level is already high and rain is forecast. Drain to prevent overflow.`,
+              `Rain Expected.`,
+              `Gauge is at ${level}cm. Rain will increase this further. Drain to ~15cm to prevent overflow.`,
               'Lower spillways to 15cm level.',
               <ArrowDown size={16} />
           );
@@ -99,8 +93,8 @@ export const IrrigationAdvice: React.FC<Props> = ({ level, weather, cropStage, p
            setAdvice(
               'info',
               'Stop Irrigating',
-              `Level > ${THRESHOLD_HIGH}cm.`,
-              `Water depth (+${depthRel}cm) is sufficient. Further irrigation is wasteful.`,
+              `Level ${level}cm (High)`,
+              `Water is deep (Gauge >${THRESHOLD_HIGH}cm). Further irrigation is wasteful.`,
               'Allow water to subside naturally.',
               <ArrowDown size={16} />
           );
@@ -115,8 +109,8 @@ export const IrrigationAdvice: React.FC<Props> = ({ level, weather, cropStage, p
     const stageName = cropStage?.name ?? "Vegetative";
 
     // 2. Identify Stage Sensitivity
-    // Stages 3 (Booting) and 4 (Flowering) need FLOOD (>15cm / 0 Rel)
-    // Stage 0 (Establishment) needs SATURATION (>15cm / 0 Rel)
+    // Stages 3 (Booting) and 4 (Flowering) need FLOOD (>15cm Gauge)
+    // Stage 0 (Establishment) needs SATURATION (>15cm Gauge)
     const needsFlood = [0, 3, 4].includes(stageIndex);
     const allowAWD = [1, 2, 5].includes(stageIndex);
     const needsDrain = [6, 7].includes(stageIndex);
@@ -127,20 +121,18 @@ export const IrrigationAdvice: React.FC<Props> = ({ level, weather, cropStage, p
     // If field needs to be dry, any water > 15cm is bad.
     if (needsDrain) {
         if (level > SOIL_LEVEL) {
-            return setAdvice('warn', 'Drain Field', 'Prepare harvest.', 'Field should be dry for ripening.', 'Open all drainage outlets.', <ArrowDown size={16} />);
+            return setAdvice('warn', 'Drain Field', 'Prepare harvest.', 'Field should be dry (Gauge <15cm) for ripening.', 'Open all drainage outlets.', <ArrowDown size={16} />);
         } else {
             return setAdvice('good', 'Ready', 'Field dry.', 'Conditions optimal for harvest.', null, <Sprout size={16} />);
         }
     }
 
     // PRIORITY 2: High Water Rule (>20cm)
-    // Applies to all stages except where deep flood is explicitly required (rare)
     if (level > THRESHOLD_HIGH) { 
         return adviseHighWater();
     }
 
     // PRIORITY 3: Critical Low Water Rule (<5cm)
-    // Applies universally as "Too Dry" for almost all growing stages
     if (level < THRESHOLD_LOW) {
         return adviseLowWater(stageName);
     }
@@ -148,29 +140,27 @@ export const IrrigationAdvice: React.FC<Props> = ({ level, weather, cropStage, p
     // PRIORITY 4: Intermediate Levels (5cm to 20cm)
     
     // A: Stages requiring Flood (Establishment, Booting, Flowering)
-    // They prefer > 15cm
     if (needsFlood) {
-        if (level < SOIL_LEVEL) { // 5cm to 15cm
-            // It's not <5cm (Critical Low), but it's below target (15cm).
+        if (level < SOIL_LEVEL) { // 5cm to 15cm Gauge
             if (isRainExpected) {
-                 return setAdvice('warn', 'Wait for Rain', `Rain chance ${rainChance}%.`, `Level (${level}cm) is sub-optimal, but rain is likely.`, null, <CloudRain size={16} />);
+                 return setAdvice('warn', 'Wait for Rain', `Rain chance ${rainChance}%.`, `Gauge (${level}cm) is below soil surface, but rain is likely.`, null, <CloudRain size={16} />);
             } else {
-                 return setAdvice('warn', 'Increase Level', 'Target 15cm+.', `Stage ${stageName} requires standing water (0-5cm relative).`, 'Top up to 17-18cm.', <Droplets size={16} />);
+                 return setAdvice('warn', 'Increase Level', 'Target Gauge 15cm+.', `Stage ${stageName} requires standing water (Gauge >15cm).`, 'Top up to 17-18cm.', <Droplets size={16} />);
             }
         } else {
              // 15cm to 20cm -> Perfect
-             return setAdvice('good', 'Optimal Flood', 'Maintained.', `Good water depth for ${stageName}.`, isHighHeat ? 'Flood helps cool the canopy.' : null, <Check size={16} />);
+             return setAdvice('good', 'Optimal Flood', 'Maintained.', `Gauge level (${level}cm) is ideal for ${stageName}.`, isHighHeat ? 'Flood helps cool the canopy.' : null, <Check size={16} />);
         }
     }
 
     // B: Stages allowing AWD (Tillering, Elongation, Filling)
     if (allowAWD) {
-        if (level < SOIL_LEVEL) { // 5cm to 15cm
+        if (level < SOIL_LEVEL) { // 5cm to 15cm Gauge
              // This is the AWD "Safe Drying" zone
-             return setAdvice('info', 'AWD Active', 'Soil drying.', 'Water is below soil surface but above critical limit. Promotes root depth.', 'Monitor for soil cracks.', <ArrowDown size={16} />);
+             return setAdvice('info', 'AWD Active', 'Soil drying.', 'Water is below soil surface (Gauge <15cm) but safe. Promotes root depth.', 'Monitor for soil cracks.', <ArrowDown size={16} />);
         } else {
              // 15cm to 20cm
-             return setAdvice('good', 'Levels Good', 'Saturated.', 'Water availability is adequate.', null, <Check size={16} />);
+             return setAdvice('good', 'Levels Good', 'Saturated.', 'Water availability is adequate (Gauge >15cm).', null, <Check size={16} />);
         }
     }
   };

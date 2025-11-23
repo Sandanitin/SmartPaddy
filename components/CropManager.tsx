@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
-import { Calendar, Save, Edit2, Sprout, Timer, AlertCircle, BookOpen, Bug, Droplets, Leaf, Scissors, Sun, CloudRain, Wind, Thermometer, Droplet } from 'lucide-react';
+import { Calendar, Save, Edit2, Sprout, Timer, AlertCircle, BookOpen, Bug, Droplets, Leaf, Scissors, Sun, CloudRain, Wind, Thermometer, Droplet, StickyNote } from 'lucide-react';
 import { PaddyVisual } from './PaddyVisual';
 import { WeatherData } from '../services/weatherService';
 
@@ -47,19 +46,19 @@ export const calculateStage = (cfg: CropConfig) => {
         { category: "Pest", text: "Monitor for Golden Apple Snails (feed on seedlings)", icon: Bug },
         { category: "Weeds", text: "Apply pre-emergence herbicide within 3-5 days", icon: AlertCircle },
         { category: "Care", text: "Replant missing hills (gap filling) within 7 days", icon: Sprout },
-        { category: "Water", text: "Keep saturated. Deep water (>18cm on gauge) drowns seedlings", icon: Droplets }
+        { category: "Water", text: "Keep saturated. Deep water (>18cm on Gauge) drowns seedlings.", icon: Droplets }
     ];
   } 
   else if (pct < 35) {
     stageIndex = 1;
     stageName = "Active Tillering";
-    advice = "Maintain 2-5cm water depth (Gauge 17-20cm). Apply N fertilizer.";
+    advice = "Maintain Gauge 17-20cm (Shallow Water). Apply N fertilizer.";
     phase = "Vegetative";
     managementTips = [
         { category: "Nutrient", text: "Apply 1st Nitrogen Topdress (Urea) for tillers", icon: Leaf },
         { category: "Weeds", text: "Critical time for weeding. Weeds steal light.", icon: AlertCircle },
         { category: "Pest", text: "Check for Whorl Maggot or Caseworm damage", icon: Bug },
-        { category: "Water", text: "Shallow water (Gauge 17-20cm) promotes tillering. AWD is safe.", icon: Droplets }
+        { category: "Water", text: "Gauge 17-20cm promotes tillering. AWD is safe.", icon: Droplets }
     ];
   }
   else if (pct < 50) {
@@ -68,7 +67,7 @@ export const calculateStage = (cfg: CropConfig) => {
     advice = "Periodic drying (AWD) is beneficial. Allow gauge to drop <15cm.";
     phase = "Vegetative";
     managementTips = [
-        { category: "Water", text: "Practice AWD (drop to <15cm). Drying deepens roots", icon: Droplets },
+        { category: "Water", text: "Practice AWD (Gauge <15cm). Drying deepens roots", icon: Droplets },
         { category: "Nutrient", text: "Apply Potassium (K) for strong stems", icon: Leaf },
         { category: "Pest", text: "Scout for Stem Borer deadhearts (white heads)", icon: Bug },
         { category: "Disease", text: "Inspect lower sheath for Sheath Blight", icon: AlertCircle }
@@ -77,7 +76,7 @@ export const calculateStage = (cfg: CropConfig) => {
   else if (pct < 65) {
     stageIndex = 3;
     stageName = "Panicle Initiation (Booting)";
-    advice = "Flood Required! Keep 5cm+ depth (Gauge >20cm). Do not stress.";
+    advice = "Flood Required! Keep Gauge >20cm. Do not stress.";
     phase = "Reproductive";
     managementTips = [
         { category: "Water", text: "Do NOT drain (Gauge must be >20cm). Stress reduces yield.", icon: Droplets },
@@ -101,7 +100,7 @@ export const calculateStage = (cfg: CropConfig) => {
   else if (pct < 90) {
     stageIndex = 5;
     stageName = "Milk / Dough Stage";
-    advice = "Keep soil saturated. Shallow water (Gauge 15-18cm) is sufficient.";
+    advice = "Keep soil saturated. Gauge 15-18cm is sufficient.";
     phase = "Ripening";
     managementTips = [
         { category: "Pest", text: "Protect ripening grain from birds and rats", icon: Bug },
@@ -137,6 +136,7 @@ export const calculateStage = (cfg: CropConfig) => {
 export const CropManager: React.FC<Props> = ({ sensorId, weather }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [config, setConfig] = useState<CropConfig | null>(null);
+  const [notes, setNotes] = useState('');
   
   // Form State
   const [variety, setVariety] = useState<'short' | 'medium' | 'long'>('medium');
@@ -152,6 +152,9 @@ export const CropManager: React.FC<Props> = ({ sensorId, weather }) => {
     } else {
       setIsEditing(true);
     }
+
+    const savedNotes = localStorage.getItem(`notes_${sensorId}`);
+    if (savedNotes) setNotes(savedNotes);
   }, [sensorId]);
 
   const handleSave = () => {
@@ -162,15 +165,19 @@ export const CropManager: React.FC<Props> = ({ sensorId, weather }) => {
     setIsEditing(false);
   };
 
+  const handleSaveNotes = () => {
+    localStorage.setItem(`notes_${sensorId}`, notes);
+  };
+
   const getWeatherAnalysis = (stageIndex: number, weather: WeatherData) => {
     const alerts = [];
     
     // Wind Analysis
     if (weather.windSpeed > 25) {
         if (stageIndex >= 4 && stageIndex <= 6) {
-            alerts.push({ icon: Wind, text: "High wind! Risk of lodging (falling over). Drain field to anchor roots.", color: "text-amber-600", bg: "bg-amber-50" });
+            alerts.push({ icon: Wind, text: "High wind! Risk of lodging. Drain field to anchor roots.", color: "text-amber-600", bg: "bg-amber-50" });
         } else {
-            alerts.push({ icon: Wind, text: "Windy conditions. Avoid foliar spraying today.", color: "text-slate-600", bg: "bg-slate-50" });
+            alerts.push({ icon: Wind, text: "Windy conditions. Avoid foliar spraying.", color: "text-slate-600", bg: "bg-slate-50" });
         }
     }
 
@@ -292,7 +299,7 @@ export const CropManager: React.FC<Props> = ({ sensorId, weather }) => {
                 ></div>
              </div>
 
-             {/* Weather Impact Section - NEW */}
+             {/* Weather Impact Section */}
              {weather && (
                 <div className="mb-5">
                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Live Field Conditions</p>
@@ -338,6 +345,22 @@ export const CropManager: React.FC<Props> = ({ sensorId, weather }) => {
                         </div>
                     </div>
                 ))}
+             </div>
+
+             {/* Notes Section - New Feature */}
+             <div className="mt-4 pt-4 border-t border-slate-100">
+                <div className="flex items-center gap-2 mb-2">
+                    <StickyNote size={14} className="text-slate-400" />
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Field Notes</span>
+                </div>
+                <textarea
+                    className="w-full text-xs p-3 bg-yellow-50/50 border border-yellow-100 rounded-lg text-slate-700 focus:outline-none focus:ring-1 focus:ring-yellow-300 resize-none font-medium placeholder-slate-400"
+                    rows={3}
+                    placeholder="Add notes about fertilizer application, pest observations, or field work..."
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    onBlur={handleSaveNotes}
+                />
              </div>
           </div>
        </div>
