@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect } from 'react';
-import { Calendar, Save, Edit2, Sprout, Timer, AlertCircle, BookOpen, Bug, Droplets, Leaf, Scissors, Sun, CloudRain, Wind, Thermometer, Droplet, StickyNote } from 'lucide-react';
+import { Calendar, Save, Edit2, Sprout, Timer, AlertCircle, BookOpen, Bug, Droplets, Leaf, Scissors, Sun, CloudRain, Wind, Thermometer, Droplet, StickyNote, Smartphone } from 'lucide-react';
 import { PaddyVisual } from './PaddyVisual';
 import { WeatherData } from '../services/weatherService';
 
@@ -349,9 +350,14 @@ export const CropManager: React.FC<Props> = ({ sensorId, weather }) => {
 
              {/* Notes Section - New Feature */}
              <div className="mt-4 pt-4 border-t border-slate-100">
-                <div className="flex items-center gap-2 mb-2">
-                    <StickyNote size={14} className="text-slate-400" />
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Field Notes</span>
+                <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                        <StickyNote size={14} className="text-slate-400" />
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Field Notes</span>
+                    </div>
+                    <div className="flex items-center gap-1 text-[9px] text-slate-400 font-medium bg-slate-50 px-2 py-0.5 rounded-full border border-slate-100">
+                        <Smartphone size={10} /> Saved to device
+                    </div>
                 </div>
                 <textarea
                     className="w-full text-xs p-3 bg-yellow-50/50 border border-yellow-100 rounded-lg text-slate-700 focus:outline-none focus:ring-1 focus:ring-yellow-300 resize-none font-medium placeholder-slate-400"

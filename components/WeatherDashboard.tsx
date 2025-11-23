@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { WeatherData } from '../services/weatherService';
-import { CloudRain, Sun, MapPin, Droplets, Calendar, RefreshCw, Cloud, CloudLightning, Snowflake, CloudFog, Wind, Clock, ArrowUp, ArrowDown, Navigation, Edit2, Check, X } from 'lucide-react';
+import { CloudRain, Sun, MapPin, Droplets, Calendar, RefreshCw, Cloud, CloudLightning, Snowflake, CloudFog, Wind, Clock, ArrowUp, ArrowDown, Navigation, Edit2, Check, X, Loader2 } from 'lucide-react';
 
 interface Props {
     weather: WeatherData | null;
@@ -49,8 +49,11 @@ export const WeatherDashboard: React.FC<Props> = ({ weather, loading, error, onR
 
     if (loading && !weather) {
         return (
-            <div className="flex flex-col items-center justify-center h-96 bg-white rounded-xl border border-slate-200 shadow-sm">
-                <RefreshCw className="h-8 w-8 text-blue-500 animate-spin mb-4" />
+            <div className="flex flex-col items-center justify-center h-96 bg-white rounded-xl border border-slate-200 shadow-sm animate-in fade-in">
+                <div className="relative mb-4">
+                    <div className="absolute inset-0 rounded-full bg-blue-400 opacity-20 animate-ping"></div>
+                    <RefreshCw className="relative z-10 h-8 w-8 text-blue-500 animate-spin" />
+                </div>
                 <p className="text-slate-500 font-medium">Fetching Forecast...</p>
             </div>
         );
@@ -58,7 +61,7 @@ export const WeatherDashboard: React.FC<Props> = ({ weather, loading, error, onR
 
     if (!weather) {
         return (
-            <div className="flex flex-col items-center justify-center h-96 bg-white rounded-xl border border-slate-200 shadow-sm p-8 text-center">
+            <div className="flex flex-col items-center justify-center h-96 bg-white rounded-xl border border-slate-200 shadow-sm p-8 text-center animate-in fade-in">
                  <div className="bg-blue-50 p-4 rounded-full mb-4 text-blue-500">
                     <CloudRain size={32} />
                  </div>
@@ -66,9 +69,11 @@ export const WeatherDashboard: React.FC<Props> = ({ weather, loading, error, onR
                  <p className="text-slate-500 mb-6 max-w-xs">Set your field location to see the 7-day forecast and receive irrigation advice.</p>
                  <button 
                     onClick={onUpdateLocation}
-                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-6 rounded-lg transition-colors flex items-center gap-2"
+                    disabled={loading}
+                    className="bg-blue-600 hover:bg-blue-700 disabled:opacity-70 disabled:cursor-not-allowed text-white font-bold py-2.5 px-6 rounded-lg transition-colors flex items-center gap-2"
                  >
-                    <Navigation size={16} /> Set Location (GPS)
+                    {loading ? <Loader2 size={16} className="animate-spin" /> : <Navigation size={16} />}
+                    {loading ? 'Locating...' : 'Set Location (GPS)'}
                  </button>
                  {error && <p className="text-red-500 text-xs mt-4 font-medium bg-red-50 px-3 py-1 rounded">Failed to get location. Please check permissions.</p>}
             </div>
@@ -118,11 +123,13 @@ export const WeatherDashboard: React.FC<Props> = ({ weather, loading, error, onR
                             )}
 
                             <button 
-                                onClick={onUpdateLocation} 
-                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-blue-700/30 hover:bg-blue-700/50 border border-white/10 text-xs font-medium text-blue-100 hover:text-white transition-colors backdrop-blur-sm"
+                                onClick={onUpdateLocation}
+                                disabled={loading}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-blue-700/30 hover:bg-blue-700/50 disabled:bg-blue-700/20 disabled:text-blue-300 disabled:cursor-wait border border-white/10 text-xs font-medium text-blue-100 hover:text-white transition-colors backdrop-blur-sm"
                                 title="Update to current device GPS location"
                             >
-                                <Navigation size={12} /> Update GPS
+                                {loading ? <Loader2 size={12} className="animate-spin" /> : <Navigation size={12} />}
+                                {loading ? 'Updating...' : 'Update GPS'}
                             </button>
                         </div>
 
@@ -189,7 +196,7 @@ export const WeatherDashboard: React.FC<Props> = ({ weather, loading, error, onR
                         <Calendar size={18} className="text-slate-400" />
                         <h3 className="text-sm font-bold text-slate-700 uppercase tracking-wide">7-Day Forecast</h3>
                     </div>
-                    <button onClick={onRefresh} className="flex items-center gap-1.5 text-slate-400 hover:text-blue-600 transition-colors text-xs font-medium bg-slate-100 hover:bg-blue-50 px-2.5 py-1 rounded-full" title="Refresh data for saved location">
+                    <button onClick={onRefresh} disabled={loading} className="flex items-center gap-1.5 text-slate-400 hover:text-blue-600 transition-colors text-xs font-medium bg-slate-100 hover:bg-blue-50 px-2.5 py-1 rounded-full disabled:opacity-50" title="Refresh data for saved location">
                         <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
                         Refresh
                     </button>
